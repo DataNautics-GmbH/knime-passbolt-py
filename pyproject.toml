@@ -1,0 +1,102 @@
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "knime-passbolt-py"
+version = "0.1.0"
+description = "Python wrapper for consuming Passbolt credentials in KNIME Python Script nodes via the knime-passbolt extension's Credential-to-Python bridge node."
+readme = "README.md"
+# PEP 639 SPDX expression form (requires hatchling >= 1.26). PyPA tutorial
+# convention as of 2024+. The `license-files` glob below ships LICENSE
+# inside the dist-info/licenses/ directory of the wheel + sdist.
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Datanautics GmbH", email = "info@datanautics.net" },
+]
+maintainers = [
+    { name = "Datanautics GmbH", email = "info@datanautics.net" },
+]
+requires-python = ">=3.9"
+keywords = ["passbolt", "knime", "credentials", "vault", "security"]
+# PEP 639 deprecates the "License :: OSI Approved :: ..." classifier
+# series in favour of the SPDX expression above. Other Trove classifiers
+# remain useful for PyPI search + filter facets.
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Plugins",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+    "Topic :: Security :: Cryptography",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://datanautics.net/"
+Source = "https://github.com/DataNautics-GmbH/knime-passbolt-py"
+Issues = "https://github.com/DataNautics-GmbH/knime-passbolt-py/issues"
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.5",
+    "build>=1.0",
+    "twine>=5.0",
+]
+
+# Src-layout: knime_passbolt/ lives under src/ so an unwanted
+# implicit-import-from-cwd can't shadow the installed package during
+# development (PyPA tutorial recommendation).
+[tool.hatch.build.targets.wheel]
+packages = ["src/knime_passbolt"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/knime_passbolt/",
+    "README.md",
+    "LICENSE",
+    "pyproject.toml",
+    "tests/",
+]
+
+# Ruff: linter + formatter. Run via `ruff check .` and `ruff format .`
+# from the package root (docs/python/knime-passbolt-py/).
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort (import order)
+    "B",    # flake8-bugbear (likely bugs / design issues)
+    "UP",   # pyupgrade (suggest modern syntax for target-version)
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-specific rules
+]
+ignore = [
+    # E501 — line too long. We pin line-length=100 above; docstring
+    # paragraphs that read better at 110 chars are tolerated rather than
+    # reformatted into worse-reading prose.
+    "E501",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Example scripts run under KNIME's Python Script node — `knio` is an
+# injected global, not an importable module in CI / lint runs.
+"examples/*.py" = ["F401"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["knime_passbolt"]
