@@ -21,6 +21,16 @@ class BrokerError(RuntimeError):
     """Raised when the broker rejects a request or is unreachable."""
 
 
+# The auth-header JSON is tiny (a scheme string + a base64 payload). Cap the
+# read so a malicious/buggy loopback service can't exhaust memory.
+_MAX_RESPONSE_BYTES = 64 * 1024
+
+# Single source of truth for the loopback host allow-list, shared by the
+# construction-time guard (PassboltSecret.__init__) and the request-time guard
+# (_require_loopback) so the two cannot drift apart.
+_LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
+
+
 def fetch_auth_header(broker_url: str, token: str, timeout: float = 5.0) -> tuple[str, str]:
     """Fetch the ``(scheme, header_value)`` pair from the broker.
 
@@ -62,7 +72,10 @@ def fetch_auth_header(broker_url: str, token: str, timeout: float = 5.0) -> tupl
     try:
         with request.urlopen(req, timeout=timeout) as resp:
             status = resp.status
-            body_bytes = resp.read()
+            # Read one byte past the cap so we can detect an over-long body.
+            body_bytes = resp.read(_MAX_RESPONSE_BYTES + 1)
+            if len(body_bytes) > _MAX_RESPONSE_BYTES:
+                raise BrokerError("Passbolt broker returned an oversized response")
     except error.HTTPError as e:
         # Map 401/404 to specific, actionable messages without exposing internals.
         if e.code == 401:
@@ -79,6 +92,11 @@ def fetch_auth_header(broker_url: str, token: str, timeout: float = 5.0) -> tupl
         raise BrokerError(f"Passbolt broker returned HTTP {e.code}") from None
     except (error.URLError, TimeoutError, OSError) as e:
         raise BrokerError(f"Passbolt broker is not reachable: {e}") from None
+    except ValueError:
+        # urllib rejects malformed header values (e.g. CRLF in the token) with
+        # ValueError. Tokens are validated upstream in PassboltSecret.__init__,
+        # but map it here too so the contract "failures are BrokerError" holds.
+        raise BrokerError("Passbolt broker request was malformed") from None
 
     if status != 200:
         raise BrokerError(f"Passbolt broker returned HTTP {status}")
@@ -109,5 +127,5 @@ def _require_loopback(url: str) -> None:
     if parsed.scheme != "http":
         raise BrokerError(f"Broker URL must use http (got {parsed.scheme!r})")
     host = parsed.hostname
-    if host not in ("127.0.0.1", "localhost", "::1"):
+    if host not in _LOOPBACK_HOSTS:
         raise BrokerError(f"Broker URL must be loopback (got host {host!r})")

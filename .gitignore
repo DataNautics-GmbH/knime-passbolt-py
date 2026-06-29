@@ -17,3 +17,15 @@ htmlcov/
 *.swp
 *~
 .DS_Store
+
+# Total Recall (local memory)
+CLAUDE.local.md
+memory/
+
+# Claude runtime (kept local — never committed even to Forgejo). Agent
+# definitions, commands, and context/ knowledge ARE tracked.
+.claude/settings.local.json
+.claude/agent-activity/
+.claude/trajectories/
+.claude/security-audit.log
+.claude/scheduled_tasks.lock

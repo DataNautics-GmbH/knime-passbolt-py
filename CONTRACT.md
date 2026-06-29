@@ -26,6 +26,21 @@ def _build_from_broker(broker_url: str, token: str, session_uuid: str) -> Passbo
 
 The module path is **`knime_passbolt._build_from_broker`**, not `knime_passbolt._secret._build_from_broker`. The `__init__.py` re-exports the function (with `# noqa: F401`) so the pickle `GLOBAL` opcode finds it at the canonical location.
 
+## Trust boundary (READ THIS)
+
+`pickle.load` on the Python side is **arbitrary-code-execution-capable by construction**. The Python wrapper validates its three string arguments (`_build_from_broker` → `PassboltSecret.__init__` → `_require_loopback`), but that validation only constrains the byte streams that *choose* to route through `_build_from_broker`. An attacker who can replace the pickle bytes simply emits a different `GLOBAL` opcode (e.g. `posix.system`) and ignores the factory entirely.
+
+The whole security model therefore rests on a single assumption:
+
+> **The pickle byte stream is only ever written to trusted storage.** The bytes are *not* transit-only: `CredentialToPythonNodeModel.execute()` persists them to a FileStore file on disk on every execute (`PickledObjectFileStorePortObject`). The trust boundary is the **KNIME workflow / FileStore directory** — anyone with write access to it can already edit the Python Script node's own source (arbitrary Python, executed verbatim), so the pickle adds no attack surface beyond what KNIME already exposes.
+
+**Status: accepted (resolved 2026-06-28).** Restricting the unpickler is not an option this extension controls — `pickle.load` runs in KNIME's `_knime_scripting_launcher.py`, not our code — and a MAC the factory checks is dead weight because the attacker bypasses the factory entirely. The reasoning is recorded in the `knime-passbolt` extension's security model (`docs/SECURITY.md` → "Python bridge: pickle trust boundary (accepted assumption)").
+
+Two consequences:
+
+1. **If a future deployment routes these bytes outside the workflow/FileStore directory** (unauthenticated network transit, shared temp, an export path), the accepted assumption is violated — escalate to the KNIME platform team to restrict the unpickler at the platform level (`find_class` allow-list limited to `knime_passbolt._build_from_broker`).
+2. **The `token` in the pickle bytes is a live bearer credential** for the loopback broker (replayable until the bridge node's `reset()` / `onDispose()` revokes it). `PassboltSecret.__reduce__` re-emits it on `pickle.dumps`, so any re-pickling of the wrapper writes a live loopback credential — keep it inside the same trusted boundary. No Passbolt password or PGP material is ever in the pickle.
+
 ## Compatibility matrix
 
 | Extension version | knime-passbolt-py version | Broker URL | Argument order |

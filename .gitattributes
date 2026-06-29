@@ -1,0 +1,22 @@
+# Defense-in-depth: prevent internal files from being included in `git archive`
+# output. The canonical filter is `scripts/release.sh`, which builds the public
+# snapshot. This file ensures any *other* path that runs `git archive` (a
+# release helper invoked elsewhere, a "Download ZIP" against a private mirror,
+# a third-party tool) also drops these paths.
+#
+# Keep this list in sync with INTERNAL_FILES / INTERNAL_DIRS in scripts/release.sh.
+
+# Internal Claude Code session guidance and bootstrap
+CLAUDE.md                       export-ignore
+HANDOFF.md                      export-ignore
+
+# Internal agent definitions, commands, session knowledge, and Claude runtime.
+# Must be `.claude/**` — a bare `.claude/` or `.claude` does NOT set the
+# attribute on nested files (gitattributes does not recurse a dir pattern).
+.claude/**                      export-ignore
+
+# Internal operator scripts (WSL/Windows-specific paths, release tooling that
+# has no purpose on the public side).
+scripts/git-push.sh             export-ignore
+scripts/git-commit-helper.sh    export-ignore
+scripts/release.sh              export-ignore

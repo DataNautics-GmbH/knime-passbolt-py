@@ -4,7 +4,9 @@ build-backend = "hatchling.build"
 
 [project]
 name = "knime-passbolt-py"
-version = "0.1.0"
+# Single-sourced from src/knime_passbolt/__init__.py (__version__) via
+# [tool.hatch.version] below — bump it there only.
+dynamic = ["version"]
 description = "Python wrapper for consuming Passbolt credentials in KNIME Python Script nodes via the knime-passbolt extension's Credential-to-Python bridge node."
 readme = "README.md"
 # PEP 639 SPDX expression form (requires hatchling >= 1.26). PyPA tutorial
@@ -46,6 +48,7 @@ dependencies = []
 Homepage = "https://datanautics.net/"
 Source = "https://github.com/DataNautics-GmbH/knime-passbolt-py"
 Issues = "https://github.com/DataNautics-GmbH/knime-passbolt-py/issues"
+Changelog = "https://github.com/DataNautics-GmbH/knime-passbolt-py/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = [
@@ -57,6 +60,9 @@ dev = [
 # Src-layout: knime_passbolt/ lives under src/ so an unwanted
 # implicit-import-from-cwd can't shadow the installed package during
 # development (PyPA tutorial recommendation).
+[tool.hatch.version]
+path = "src/knime_passbolt/__init__.py"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/knime_passbolt"]
 
@@ -64,6 +70,7 @@ packages = ["src/knime_passbolt"]
 include = [
     "src/knime_passbolt/",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE",
     "pyproject.toml",
     "tests/",

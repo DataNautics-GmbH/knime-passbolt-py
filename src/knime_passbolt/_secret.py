@@ -11,8 +11,9 @@ is intended to be called by user code directly except :class:`PassboltSecret`.
 from __future__ import annotations
 
 import ctypes
+from urllib.parse import urlparse
 
-from knime_passbolt._broker import fetch_auth_header
+from knime_passbolt._broker import _LOOPBACK_HOSTS, BrokerError, fetch_auth_header
 
 
 class PassboltSecret:
@@ -43,10 +44,22 @@ class PassboltSecret:
     def __init__(self, broker_url: str, token: str, session_uuid: str) -> None:
         # Validate at construction so a malformed pickle surfaces here, not at
         # first use. None of these strings are secret in themselves.
-        if not isinstance(broker_url, str) or not broker_url.startswith("http://127.0.0.1:"):
+        #
+        # Parse structurally rather than with startswith: a string check like
+        # "http://127.0.0.1:" is bypassable via the userinfo trick
+        # ("http://127.0.0.1:@evil.com/" has hostname evil.com). Mirror the
+        # host allow-list in _broker._require_loopback so the two guards agree.
+        if not isinstance(broker_url, str):
+            raise ValueError("broker_url must be a string")
+        parsed = urlparse(broker_url)
+        if parsed.scheme != "http" or parsed.hostname not in _LOOPBACK_HOSTS:
             raise ValueError("broker_url must be a loopback http URL")
         if not isinstance(token, str) or len(token) < 32:
             raise ValueError("token must be a non-trivial string")
+        # Reject control chars / non-ASCII so the token can never inject a
+        # header (CRLF) or raise mid-request once it reaches the broker call.
+        if not token.isascii() or not token.isprintable():
+            raise ValueError("token must be printable ASCII")
         if not isinstance(session_uuid, str):
             raise ValueError("session_uuid must be a string")
         self._broker_url = broker_url
@@ -62,9 +75,14 @@ class PassboltSecret:
 
         Returning ``(_build_from_broker, (...))`` means that even if user
         code accidentally calls ``pickle.dumps(secret)``, the resulting
-        bytes contain only the broker handshake — never any credential.
-        The buffer state (``_buf``, ``_wiped``) is intentionally dropped:
-        re-loading creates a fresh, un-fetched wrapper.
+        bytes contain only the broker handshake — never the Passbolt
+        credential itself. The buffer state (``_buf``, ``_wiped``) is
+        intentionally dropped: re-loading creates a fresh, un-fetched wrapper.
+
+        Security note: the bytes DO contain the bearer ``token``, which is a
+        live, replayable credential for the loopback broker for as long as the
+        bridge node's KNIME execution state lives. Do not persist the pickle
+        to any location an attacker can read.
         """
         return (_build_from_broker, (self._broker_url, self._token, self._session_uuid))
 
@@ -114,7 +132,12 @@ class PassboltSecret:
 
         scheme, header_value = fetch_auth_header(self._broker_url, self._token)
         # Compose "<scheme> <header_value>". For Passbolt the scheme is "Basic".
-        composed = f"{scheme} {header_value}".encode("ascii")
+        # A non-ASCII scheme/header from a misbehaving broker would otherwise
+        # raise a raw UnicodeEncodeError; surface it as a clean BrokerError.
+        try:
+            composed = f"{scheme} {header_value}".encode("ascii")
+        except UnicodeEncodeError:
+            raise BrokerError("Passbolt broker returned a non-ASCII auth header") from None
         self._buf = bytearray(composed)
         # Best-effort: scrub the intermediate `composed` bytes object. Bytes
         # objects are immutable; we can't directly zero it. The GC will
@@ -135,21 +158,31 @@ class PassboltSecret:
         Uses :func:`ctypes.memset` on the bytearray's underlying buffer for a
         best-effort guarantee; CPython provides no stronger primitive.
         """
-        if self._buf is not None:
-            try:
-                # bytearray's buffer is a contiguous block. ctypes.memset
-                # overwrites it in place. Address-of-array returns a void*
-                # to the first byte.
-                length = len(self._buf)
-                if length > 0:
-                    addr = (ctypes.c_char * length).from_buffer(self._buf)
-                    ctypes.memset(addr, 0, length)
-            except (TypeError, ValueError):
-                # Fallback if from_buffer is unavailable on this CPython build.
-                for i in range(len(self._buf)):
-                    self._buf[i] = 0
+        # Always end marked wiped with the buffer reference dropped, even if
+        # zeroization fails — a fail-open wipe (buffer left populated, wrapper
+        # still usable) is worse than a buffer we couldn't scrub in place.
+        try:
+            buf = self._buf
+            if buf is not None and len(buf) > 0:
+                try:
+                    # bytearray's buffer is a contiguous block. ctypes.memset
+                    # overwrites it in place. Address-of-array returns a void*
+                    # to the first byte.
+                    addr = (ctypes.c_char * len(buf)).from_buffer(buf)
+                    ctypes.memset(addr, 0, len(buf))
+                except (TypeError, ValueError, BufferError):
+                    # from_buffer unavailable on this build, or the buffer is
+                    # exported elsewhere (memoryview held). Try a plain
+                    # overwrite; if that also fails on an exported buffer we
+                    # cannot zero it — the finally still drops the reference.
+                    try:
+                        for i in range(len(buf)):
+                            buf[i] = 0
+                    except BufferError:
+                        pass
+        finally:
             self._buf = None
-        self._wiped = True
+            self._wiped = True
 
 
 def _build_from_broker(broker_url: str, token: str, session_uuid: str) -> PassboltSecret:

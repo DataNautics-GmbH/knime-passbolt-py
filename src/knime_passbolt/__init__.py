@@ -52,4 +52,4 @@ disciplined helper class.
 from knime_passbolt._secret import PassboltSecret, _build_from_broker  # noqa: F401
 
 __all__ = ["PassboltSecret"]
-__version__ = "0.1.0"
+__version__ = "0.1.1"
