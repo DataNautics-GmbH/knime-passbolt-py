@@ -1,6 +1,6 @@
 # Bridge contract
 
-`knime-passbolt-py` and the [`knime-passbolt`](https://github.com/mikeg-de/knime-passbolt) KNIME extension communicate through a hand-crafted pickle byte stream emitted by the Java side and deserialised by `pickle.load` on the Python side. The byte format is a **stable contract** that both sides must honour.
+`knime-passbolt-py` and the [`knime-passbolt`](https://datanautics.net/passbolt) KNIME extension communicate through a hand-crafted pickle byte stream emitted by the Java side and deserialised by `pickle.load` on the Python side. The byte format is a **stable contract** that both sides must honour.
 
 ## Pickle format (pickle protocol 2)
 
@@ -57,11 +57,11 @@ A new entry is added here on every change to the byte format, the function signa
 
 ## Producer and consumer source locations
 
-- **Producer (Java):** `org.knime.ext.passbolt.python.PythonPickleEmitter` in `mikeg-de/knime-passbolt`.
+- **Producer (Java):** `org.knime.ext.passbolt.python.PythonPickleEmitter` in the `knime-passbolt` KNIME extension (Java side).
 - **Consumer (Python):** `_build_from_broker(broker_url, token, session_uuid)` in `src/knime_passbolt/_secret.py` (re-exported by `src/knime_passbolt/__init__.py`).
 
 ## Where to file bugs
 
-- **Broker / JVM-side issues:** [`mikeg-de/knime-passbolt`](https://github.com/mikeg-de/knime-passbolt) issue tracker.
+- **Broker / JVM-side issues:** the `knime-passbolt` KNIME extension — see <https://datanautics.net/passbolt>.
 - **`PassboltSecret` / Python-wrapper issues:** this repo's issue tracker.
 - **Cross-repo issues** (contract drift, version-pair mismatch): file in both, cross-link, tag `cross-repo`.
